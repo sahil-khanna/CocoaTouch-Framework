@@ -1,0 +1,49 @@
+#!/bin/sh
+
+#  fat_library.sh
+#  Fat Library
+#
+#  Created by sahil.khanna on 08/01/19.
+#  Copyright © 2019 Sahil Khanna. All rights reserved.
+UNIVERSAL_OUTPUTFOLDER=${BUILD_DIR}/${CONFIGURATION}-universal
+
+if [ "${CONFIGURATION}" == "Release" ]; then
+ADDITIONAL_PARAMETERS="GCC_GENERATE_DEBUGGING_SYMBOLS=NO BITCODE_GENERATION_MODE=bitcode"
+else
+ADDITIONAL_PARAMETERS="GCC_GENERATE_DEBUGGING_SYMBOLS=YES"
+fi
+
+if [ "true" == ${ALREADYINVOKED:-false} ]
+then
+echo "RECURSION: Detected, stopping"
+else
+export ALREADYINVOKED="true"
+
+echo "Step 1"
+# Step 1. Build Device and Simulator versions
+xcodebuild -target "${PROJECT_NAME}" -UseModernBuildSystem=NO ONLY_ACTIVE_ARCH=NO -configuration ${CONFIGURATION} ${ADDITIONAL_PARAMETERS} BUILD_DIR="${BUILD_DIR}" BUILD_ROOT="${BUILD_ROOT}" -sdk iphoneos clean build
+xcodebuild -target "${PROJECT_NAME}" -UseModernBuildSystem=NO ONLY_ACTIVE_ARCH=NO -configuration ${CONFIGURATION} ${ADDITIONAL_PARAMETERS} BUILD_DIR="${BUILD_DIR}" BUILD_ROOT="${BUILD_ROOT}" -sdk iphonesimulator VALID_ARCHS="i386 x86_64" clean build
+
+echo "Step 2"
+# Step 2. Copy the framework structure (from iphoneos build) to the universal folder
+mkdir "${UNIVERSAL_OUTPUTFOLDER}"
+cp -R "${BUILD_DIR}/${CONFIGURATION}-iphoneos/${PROJECT_NAME}.framework/" "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework"
+
+echo "Step 3"
+# Step 3. Copy Swift modules (from iphonesimulator build) to the copied framework directory
+cp -R "${BUILD_DIR}/${CONFIGURATION}-iphonesimulator/${PROJECT_NAME}.framework/Modules/${PROJECT_NAME}.swiftmodule/." "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework/Modules/${PROJECT_NAME}.swiftmodule"
+
+echo "Step 4"
+# Step 4. Create universal binary file using lipo and place the combined executable in the copied framework directory
+lipo -create -output "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework/${PROJECT_NAME}" "${BUILD_DIR}/${CONFIGURATION}-iphonesimulator/${PROJECT_NAME}.framework/${PROJECT_NAME}" "${BUILD_DIR}/${CONFIGURATION}-iphoneos/${PROJECT_NAME}.framework/${PROJECT_NAME}"
+
+#echo "Step 5"
+# Step 5. Convenience step to copy the framework to the project's directory
+cp -R "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework" "${PROJECT_DIR}"
+
+echo "Step 6"
+# Step 6. Convenience step to open the project's directory in Finder
+#open "${PROJECT_DIR}"
+open "${UNIVERSAL_OUTPUTFOLDER}"
+
+fi
